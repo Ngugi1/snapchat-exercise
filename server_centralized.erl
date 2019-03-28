@@ -39,8 +39,8 @@ initialize() ->
 data_actor(Data) ->
     receive
         {Sender, register_user} ->
-            io:format("received_register_user \n"),
             {NewData, NewUserId} = add_new_user(),
+%%            io:format("registered\n"),
             Sender ! {self(), registered_user, NewUserId}, %% TODO change 003 - respond to the user directly, don't go through the registration server
             data_actor(NewData);
 
@@ -50,11 +50,13 @@ data_actor(Data) ->
 
         {Sender, get_stories, UserId} ->
             Sender ! {self(), stories, UserId, stories(Data, UserId)},
+%%            io:format("gostories\n"),
             data_actor(Data);
 
         {Sender, make_story, UserId, Text} ->
             {NewData, Timestamp, StoryId} = make_story(Data, UserId, Text),
             Sender ! {self(), story_published, UserId, Timestamp},
+%%            io:format("madestory\n"),
             % send_after sends the destruct message after 30 seconds
             timer:send_after(?EXPIRATION_TIME, self(),
                 {self(), destruct_story, UserId, StoryId}),
@@ -67,6 +69,7 @@ data_actor(Data) ->
         {Sender, befriend, UserId, NewFriendId} ->
             NewData = befriend(Data, UserId, NewFriendId),
             Sender ! {self(), befriended, UserId, NewFriendId},
+%%            io:format("befriended\n"),
             data_actor(NewData);
         _ ->
             io:write(unknown_message)
@@ -90,7 +93,6 @@ homepage(Data, UserId, Sender) ->
         true ->
             AggregatorId ! {self(), no_friends, UserId}; %% No friends no timeline
         false ->
-            io:format("Getting stories from friends \n"),
             lists:foreach(fun(FriendId) ->
                 FriendId ! {AggregatorId, get_stories, FriendId}
                           end,
@@ -114,6 +116,7 @@ stories(Data, UserId) ->
     maps:values(Stories).
 
 make_story(Data, UserId, Text) ->
+%%    io:format("\nMaking story\n"),
     {user, UserId, Stories, LastStoryId, Friends} = Data,
     StoryId = LastStoryId + 1,
     Timestamp = os:timestamp(),
@@ -128,10 +131,18 @@ destruct_story(Data, UserId, StoryId) ->
     NewUser. %% TODO - this is server for one user change 006
 
 befriend(Data, UserId, NewFriendId) ->
-    {user, UserId, Stories, LastStoryId, Friends} = Data,
-    NewFriends = sets:add_element(NewFriendId, Friends),
-    NewUser = {user, UserId, Stories, LastStoryId, NewFriends},
-    NewUser. %% TODO 5 - Change - we just return the same user but with different set of friends
+
+    if
+        UserId == NewFriendId ->
+            Data;
+        true ->
+            {user, UserId, Stories, LastStoryId, Friends} = Data,
+            NewFriends = sets:add_element(NewFriendId, Friends),
+            NewUser = {user, UserId, Stories, LastStoryId, NewFriends},
+            NewUser
+
+    end.
+%% TODO 5 - Change - we just return the same user but with different set of friends
 
 %%
 %% Test Functions
@@ -161,9 +172,7 @@ init_for_test() ->
     {_, Pid2} = server:register_user(ServerPid),
     {_, Pid3} = server:register_user(ServerPid),
     {_, Pid4} = server:register_user(ServerPid),
-    PIDS = [Pid1, Pid2, Pid3, Pid4],
-    io:write(PIDS),
-    PIDS.
+   [Pid1, Pid2, Pid3, Pid4].
 
 
 homepage_test() ->
